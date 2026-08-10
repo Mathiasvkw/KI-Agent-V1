@@ -1,36 +1,39 @@
-import streamlit as st
+import sqlite3
 import pandas as pd
+import streamlit as st
 
-# Seitentitel & Icon festlegen
-st.set_page_config(page_title="Mein Browser-Prototyp", page_icon="🚀", layout="wide")
+# Name der Datenbank-Datei
+DB_FILE = "meine_datenbank.db"
 
-st.title("🚀 Mein kostenloser Python-Prototyp")
-st.write("Diese App wurde zu 100 % im Browser entwickelt und gehostet.")
+# 1. Verbindung herstellen
+# check_same_thread=False ist wichtig, da Streamlit Requests in verschiedenen Threads ausführt
+def get_connection():
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
 
-# Interaktive Seitenleiste
-st.sidebar.header("Filter & Optionen")
-kategorie = st.sidebar.selectbox("Wähle eine Region:", ["Vorarlberg", "Tirol", "Salzburg"])
+conn = get_connection()
 
-# Beispieldaten erzeugen
-data = {
-    "Region": ["Vorarlberg", "Vorarlberg", "Tirol", "Tirol", "Salzburg"],
-    "Projekt": ["Projekt Alpha", "Projekt Beta", "Projekt Gamma", "Projekt Delta", "Projekt Epsilon"],
-    "Status": ["Aktiv", "In Planung", "Aktiv", "Abgeschlossen", "Aktiv"],
-    "Wert (€)": [15000, 23000, 18500, 42000, 9500]
-}
-df = pd.DataFrame(data)
+# 2. Tabelle beim Start automatisch anlegen (falls sie noch nicht existiert)
+with conn:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS eintraege (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL
+        )
+    """)
 
-# Daten filtern
-filtered_df = df[df["Region"] == kategorie]
+# --- Streamlit Benutzeroberfläche ---
+st.title("Meine SQLite App")
 
-# Kennzahlen (KPIs) anzeigen
-col1, col2 = st.columns(2)
-col1.metric(label="Anzahl Projekte", value=len(filtered_df))
-col2.metric(label="Gesamtwert (€)", value=f"{filtered_df['Wert (€)'].sum():,} €")
+# Formular zum Einfügen von Daten
+neuer_eintrag = st.text_input("Neuen Text eingeben:")
+if st.button("Speichern"):
+    if neuer_eintrag:
+        with conn:
+            conn.execute("INSERT INTO eintraege (text) VALUES (?)", (neuer_eintrag,))
+        st.success("Erfolgreich gespeichert!")
+        st.rerun()  # Lädt die Seite neu, damit die Liste sofort aktualisiert wird
 
-st.subheader(f"Übersicht für {kategorie}")
-st.dataframe(filtered_df, use_container_width=True)
-
-# Interaktiver Button
-if st.button("Aktion ausführen"):
-    st.success(f"Daten für {kategorie} wurden erfolgreich verarbeitet!")
+# Daten aus der Datenbank auslesen und anzeigen
+st.subheader("Bestehende Einträge")
+df = pd.read_sql_query("SELECT * FROM eintraege", conn)
+st.dataframe(df)
